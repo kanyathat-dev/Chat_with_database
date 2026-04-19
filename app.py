@@ -72,7 +72,7 @@ def generate_summary_answer(user_question):
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-st.title('Gemini Chat with Database')
+st.title('📊Gemini Chat with Database')
 
 # แสดงประวัติการสนทนา
 for message in st.session_state.messages:
