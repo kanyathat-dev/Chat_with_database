@@ -33,7 +33,7 @@ data_dict_text = """
 
 # HELPER FUNCTIONS
 def query_to_dataframe(sql_query, database_name):
-"""รัน SQL และคืนค่าเป็น DataFrame"""
+ """รัน SQL และคืนค่าเป็น DataFrame"""
  try:
   connection = sqlite3.connect(database_name)
   result_df = pd.read_sql_query(sql_query, connection)
