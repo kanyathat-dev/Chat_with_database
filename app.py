@@ -36,9 +36,13 @@ data_dict_text = """
 # 3. ฟังก์ชันดึงข้อมูลจาก CSV
 def query_to_dataframe(sql_query):
     try:
+        # อ่านไฟล์
         df = pd.read_csv('test_transactions_2026.csv')
+        # เปลี่ยนให้ชื่อตารางเป็น 'transactions' แน่นอน
         conn = sqlite3.connect(':memory:')
-        df.to_sql('transactions', conn, index=False)
+        df.to_sql('transactions', conn, if_exists='replace', index=False)
+        
+        # รัน Query
         result_df = pd.read_sql_query(sql_query, conn)
         conn.close()
         return result_df
