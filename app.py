@@ -102,7 +102,7 @@ return call_gemini(answer_prompt_input, is_json=False)
 
 # USER INTERFACE
 # ตรวจสอบและสร้าง Chat History ใน Session State
- if "messages" not in st.session_state:
+if "messages" not in st.session_state:
   st.session_state.messages = []
 
  st.title('Gemini Chat with Database')
@@ -115,7 +115,7 @@ for message in st.session_state.messages:
 # รับ Input
 if prompt := st.chat_input("พิมพ์คําถามที0นี0..."):
 # เก็บและแสดงข้อความ User
- st.session_state.messages.append({"role": "user", "content": prompt})
+st.session_state.messages.append({"role": "user", "content": prompt})
  with st.chat_message("user"):
   st.markdown(prompt)
 # ประมวลผลและแสดงข้อความ Assistant
