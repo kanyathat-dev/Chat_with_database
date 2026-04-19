@@ -60,10 +60,17 @@ def generate_gemini_answer(prompt, is_json=False):
 
 # PROMPT TEMPLATES
 script_prompt = """
-Goal: สร้าง SQL query สำหรับคำถามนี้: {question}
-Table Name: {table_name}
-Schema: {data_dict}
-Output: ส่งกลับมาในรูปแบบ JSON {"script": "SQL_QUERY_HERE"} (ห้ามมีคำอธิบายประกอบ หรือ Markdown นอกเหนือจาก JSON)
+### Goal
+สร้าง SQL query สำหรับคำถามนี้: {question}
+
+### Context
+ตารางที่ใช้งานคือ: {table_name}
+โครงสร้างข้อมูล (Schema): 
+{data_dict}
+
+### Output
+ตอบกลับมาในรูปแบบ JSON เท่านั้น โดยมีโครงสร้างดังนี้: {"script": "SQL_QUERY_HERE"} 
+(ห้ามมีคำอธิบายประกอบ หรือ Markdown นอกเหนือจาก JSON)
 """
 
 answer_prompt = """
@@ -101,7 +108,7 @@ def generate_summary_answer(user_question):
     return generate_gemini_answer(answer_prompt_input, is_json=False)
 
 # USER INTERFACE
-st.title('Gemini Chat with Database')
+st.title('📊Gemini Chat with Database')
 
 # ตรวจสอบและสร้าง Chat History ใน Session State
 if "messages" not in st.session_state:
