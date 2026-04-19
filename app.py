@@ -97,7 +97,7 @@ answer_prompt_input = answer_prompt.format(
  question=user_question,
  raw_data=df_result.to_string()
  )
- return call_gemini(answer_prompt_input, is_json=False)
+return call_gemini(answer_prompt_input, is_json=False)
 
 # USER INTERFACE
 # ตรวจสอบและสร้าง Chat History ใน Session State
