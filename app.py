@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 from google import genai
 from google.genai import types
 import json
@@ -34,7 +33,7 @@ data_dict_text = """
 
 # HELPER FUNCTIONS
 def query_to_dataframe(sql_query, database_name):
- """รัน SQL และคืนค่าเป็น DataFrame"""
+"""รัน SQL และคืนค่าเป็น DataFrame"""
  try:
   connection = sqlite3.connect(database_name)
   result_df = pd.read_sql_query(sql_query, connection)
@@ -98,7 +97,7 @@ answer_prompt_input = answer_prompt.format(
  question=user_question,
  raw_data=df_result.to_string()
  )
-return call_gemini(answer_prompt_input, is_json=False)
+ return call_gemini(answer_prompt_input, is_json=False)
 
 # USER INTERFACE
 # ตรวจสอบและสร้าง Chat History ใน Session State
