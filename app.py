@@ -5,37 +5,31 @@ import json
 from google import genai
 from google.genai import types
 
-# 1. ตั้งค่า API Key จาก Secrets
+# 1. การตั้งค่า API (ต้องตั้งค่าใน Streamlit Cloud > Settings > Secrets)
 if "gemini_api_key" not in st.secrets:
     st.error("กรุณาตั้งค่า 'gemini_api_key' ในไฟล์ secrets ของ Streamlit")
     st.stop()
 
 gmn_client = genai.Client(api_key=st.secrets["gemini_api_key"])
 
-# 2. Schema ข้อมูลสำหรับบอก AI
+# 2. Schema ข้อมูลสำหรับอ้างอิง AI
 data_dict_text = """
-- trx_date: วันที่ทำธุรกรรม
-- trx_no: หมายเลขธุรกรรม
-- member_code: รหัสสมาชิก
-- branch_code: รหัสสาขา
-- branch_region: ภูมิภาค
-- branch_province: จังหวัด
-- product_code: รหัสสินค้า
-- product_category: หมวดหมู่สินค้า
-- order_qty: จำนวน
-- unit_price: ราคาต่อหน่วย
-- net_amount: ยอดขายสุทธิ
+- trx_date, trx_no, member_code, branch_code, branch_region, branch_province, 
+- product_code, product_category, product_group, product_type, 
+- order_qty, unit_price, cost, item_discount, customer_discount, net_amount, cost_amount
 """
 
-# 3. ฟังก์ชันอ่าน CSV และ Query
+# 3. ฟังก์ชันดึงข้อมูลจาก CSV (แปลงเป็น SQL ให้ AI ใช้งาน)
 def query_to_dataframe(sql_query):
     try:
-        # อ่าน CSV โดยให้ Pandas ตรวจหาตัวคั่น (sep) เองอัตโนมัติ
+        # อ่านไฟล์ CSV โดยให้ระบบตรวจหาตัวคั่น (sep) อัตโนมัติ
         df = pd.read_csv('test_transactions_2026.csv', sep=None, engine='python')
         
+        # สร้าง SQL Database ในหน่วยความจำเพื่อรองรับคำสั่ง SQL
         conn = sqlite3.connect(':memory:')
         df.to_sql('transactions', conn, if_exists='replace', index=False)
         
+        # รัน Query
         result_df = pd.read_sql_query(sql_query, conn)
         conn.close()
         return result_df
@@ -43,7 +37,7 @@ def query_to_dataframe(sql_query):
         return f"Database Error: {e}"
 
 # 4. ฟังก์ชันเรียก AI
-def ask_gemini(prompt, is_json=False):
+def generate_gemini_answer(prompt, is_json=False):
     try:
         config = types.GenerateContentConfig(
             response_mime_type="application/json" if is_json else "text/plain"
@@ -58,37 +52,46 @@ def ask_gemini(prompt, is_json=False):
         return f"AI Error: {e}"
 
 # 5. Core Logic
-def process_user_query(user_question):
-    prompt = f"""
-    ตาราง transactions มี Schema ดังนี้: {data_dict_text}
-    คำถาม: {user_question}
-    ให้ตอบเป็น JSON เท่านั้นในรูปแบบ {{"script": "SELECT ... FROM transactions ..."}}
+def generate_summary_answer(user_question):
+    script_prompt = f"""
+    ### Goal: แปลงคำถามให้เป็น SQL สำหรับตารางชื่อ 'transactions'
+    ### Schema: {data_dict_text}
+    ### Input: {user_question}
+    ### Output: ตอบกลับเป็น JSON เท่านั้นในรูปแบบ {{"script": "SELECT ... FROM transactions ..."}}
     """
     
-    response_text = ask_gemini(prompt, is_json=True)
+    response_text = generate_gemini_answer(script_prompt, is_json=True)
     try:
+        # ลบ Markdown ป้องกันกรณี AI ส่งมาใน block code
         clean_json = response_text.replace("```json", "").replace("```", "").strip()
-        sql_query = json.loads(clean_json)['script']
+        sql_script = json.loads(clean_json)['script']
     except:
-        return f"AI ไม่สามารถสร้าง SQL ได้: {response_text}"
+        return f"ขออภัย ไม่สามารถสร้างคำสั่ง SQL ได้: {response_text}"
 
-    df = query_to_dataframe(sql_query)
-    if isinstance(df, str): return df
+    df_result = query_to_dataframe(sql_script)
+    if isinstance(df_result, str): return df_result
 
-    return f"ผลลัพธ์ข้อมูล:\n\n{df.to_string()}"
+    answer_prompt = f"จากข้อมูลนี้: {df_result.to_string()} สรุปคำตอบให้หน่อย: {user_question}"
+    return generate_gemini_answer(answer_prompt, is_json=False)
 
-# 6. UI
+# 6. User Interface
 st.title('📊 Gemini Database Chatbot')
 
-if "messages" not in st.session_state: st.session_state.messages = []
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]): st.markdown(msg["content"])
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-if prompt := st.chat_input("ถามคำถามเกี่ยวกับยอดขาย..."):
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("ถามคำถามเกี่ยวกับยอดขายที่นี่..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
     with st.chat_message("assistant"):
-        with st.spinner('กำลังวิเคราะห์...'):
-            ans = process_user_query(prompt)
-            st.markdown(ans)
-    st.session_state.messages.append({"role": "assistant", "content": ans})
+        with st.spinner('กำลังหาคำตอบ...'):
+            response = generate_summary_answer(prompt)
+            st.markdown(response)
+    
+    st.session_state.messages.append({"role": "assistant", "content": response})
