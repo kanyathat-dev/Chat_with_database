@@ -52,7 +52,7 @@ def ask_gemini(prompt, is_json=False):
             response_mime_type="application/json" if is_json else "text/plain"
         )
         response = gmn_client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=prompt,
             config=config
         )
