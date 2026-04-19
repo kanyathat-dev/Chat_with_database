@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 from google import genai
 from google.genai import types
 import json
@@ -33,95 +34,90 @@ data_dict_text = """
 
 # HELPER FUNCTIONS
 def query_to_dataframe(sql_query, database_name):
- """รัน SQL และคืนค่าเป็น DataFrame"""
- try:
-  connection = sqlite3.connect(database_name)
-  result_df = pd.read_sql_query(sql_query, connection)
-  connection.close()
-  return result_df
- except Exception as e:
-  return f"Database Error: {e}"
+    """รัน SQL และคืนค่าเป็น DataFrame"""
+    try:
+        connection = sqlite3.connect(database_name)
+        result_df = pd.read_sql_query(sql_query, connection)
+        connection.close()
+        return result_df
+    except Exception as e:
+        return f"Database Error: {e}"
 
 def generate_gemini_answer(prompt, is_json=False):
- """เรียก Gemini API"""
- try:
-  config = types.GenerateContentConfig(
-   response_mime_type="application/json" if is_json else "text/plain" )
-  response = gmn_client.models.generate_content(
-   model='gemini-2.5-flash-lite',
-   contents=prompt,
-   config=config)
-  return response.text
- except Exception as e:
-  return f"AI Error: {e}"
+    """เรียก Gemini API"""
+    try:
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json" if is_json else "text/plain"
+        )
+        response = gmn_client.models.generate_content(
+            model='gemini-2.0-flash', # ปรับรุ่นให้เหมาะสม
+            contents=prompt,
+            config=config
+        )
+        return response.text
+    except Exception as e:
+        return f"AI Error: {e}"
 
-# PROMPT TEMPLATES
+# PROMPT TEMPLATES (ตัวอย่างการกำหนดค่า)
 script_prompt = """
-### Goal
-### Context
-### Input
-### Process
-### Output
-(ห้ามมีคําอธิบายประกอบ หรือ Markdown นอกเหนือจาก JSON)
+### Goal: แปลงคำถามภาษาธรรมชาติให้เป็น SQL
+### Context: ตารางชื่อ {table_name} มีข้อมูลดังนี้ {data_dict}
+### Input: {question}
+### Output: ส่งออกมาในรูปแบบ JSON: {"script": "SELECT ..."}
+(ห้ามมีคำอธิบายประกอบ หรือ Markdown นอกเหนือจาก JSON)
 """
 
 answer_prompt = """
-### Goal
-### Context
-### Input
-### Process
-### Output
+### Goal: สรุปคำตอบจากข้อมูลที่ได้
+### Context: คำถามคือ {question} ข้อมูลที่ได้คือ {raw_data}
+### Output: ตอบเป็นภาษาไทย
 """
 
 # CORE LOGIC
 def generate_summary_answer(user_question):
- # 1. ดึง Schema จาก session_state มาใช้ใน Prompt
- script_prompt_input = script_prompt.format(
-  question=user_question,
-  table_name=data_table,
-  data_dict=data_dict_text
- )
- sql_json_text = call_gemini(script_prompt_input, is_json=True)
- try:
-  sql_script = json.loads(sql_json_text)['script']
- except:
-  return "ขออภัย ไม่สามารถสร้างคําสั9ง SQL ได้"
+    # 1. สร้าง SQL
+    script_prompt_input = script_prompt.format(
+        question=user_question,
+        table_name=data_table,
+        data_dict=data_dict_text
+    )
+    sql_json_text = generate_gemini_answer(script_prompt_input, is_json=True)
+    
+    try:
+        sql_script = json.loads(sql_json_text)['script']
+    except:
+        return "ขออภัย ไม่สามารถสร้างคำสั่ง SQL ได้"
 
-# 2. Query ข้อมูล
-df_result = query_to_dataframe(sql_script, db_name)
-if isinstance(df_result, str):
- return df_result
+    # 2. Query ข้อมูล
+    df_result = query_to_dataframe(sql_script, db_name)
+    if isinstance(df_result, str):
+        return df_result
 
-# 3. สรุปคําตอบ
-answer_prompt_input = answer_prompt.format(
- question=user_question,
- raw_data=df_result.to_string()
- )
-return call_gemini(answer_prompt_input, is_json=False)
+    # 3. สรุปคำตอบ
+    answer_prompt_input = answer_prompt.format(
+        question=user_question,
+        raw_data=df_result.to_string()
+    )
+    return generate_gemini_answer(answer_prompt_input, is_json=False)
 
 # USER INTERFACE
-# ตรวจสอบและสร้าง Chat History ใน Session State
 if "messages" not in st.session_state:
-  st.session_state.messages = []
+    st.session_state.messages = []
 
 st.title('Gemini Chat with Database')
 
-# แสดงประวัติการสนทนา
 for message in st.session_state.messages:
- with st.chat_message(message["role"]):
-  st.markdown(message["content"])
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-# รับ Input
-if prompt := st.chat_input("พิมพ์คําถามที0นี0..."):
-# เก็บและแสดงข้อความ User
- st.session_state.messages.append({"role": "user", "content": prompt})
- with st.chat_message("user"):
-  st.markdown(prompt)
-# ประมวลผลและแสดงข้อความ Assistant
- with st.chat_message("assistant"):
-  with st.spinner('กําลังหาคําตอบ...'):
-   response = generate_summary_answer(prompt)
-   st.markdown(response)
-
-# เก็บคําตอบลง Session
- st.session_state.messages.append({"role": "assistant", "content": response})
+if prompt := st.chat_input("พิมพ์คำถามที่นี่..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    with st.chat_message("assistant"):
+        with st.spinner('กำลังหาคำตอบ...'):
+            response = generate_summary_answer(prompt)
+            st.markdown(response)
+    
+    st.session_state.messages.append({"role": "assistant", "content": response})
