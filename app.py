@@ -114,7 +114,7 @@ for message in st.session_state.messages:
 # รับ Input
 if prompt := st.chat_input("พิมพ์คําถามที0นี0..."):
 # เก็บและแสดงข้อความ User
-st.session_state.messages.append({"role": "user", "content": prompt})
+ st.session_state.messages.append({"role": "user", "content": prompt})
  with st.chat_message("user"):
   st.markdown(prompt)
 # ประมวลผลและแสดงข้อความ Assistant
@@ -124,4 +124,4 @@ st.session_state.messages.append({"role": "user", "content": prompt})
     st.markdown(response)
 
 # เก็บคําตอบลง Session
-st.session_state.messages.append({"role": "assistant", "content": response})
+ st.session_state.messages.append({"role": "assistant", "content": response})
