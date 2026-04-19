@@ -104,7 +104,7 @@ return call_gemini(answer_prompt_input, is_json=False)
 if "messages" not in st.session_state:
   st.session_state.messages = []
 
- st.title('Gemini Chat with Database')
+st.title('Gemini Chat with Database')
 
 # แสดงประวัติการสนทนา
 for message in st.session_state.messages:
@@ -120,8 +120,8 @@ st.session_state.messages.append({"role": "user", "content": prompt})
 # ประมวลผลและแสดงข้อความ Assistant
  with st.chat_message("assistant"):
   with st.spinner('กําลังหาคําตอบ...'):
-  response = generate_summary_answer(prompt)
-   st.markdown(response)
+   response = generate_summary_answer(prompt)
+    st.markdown(response)
 
 # เก็บคําตอบลง Session
 st.session_state.messages.append({"role": "assistant", "content": response})
