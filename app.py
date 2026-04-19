@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
+import os
 from google import genai
 from google.genai import types
 
@@ -12,8 +13,11 @@ if "gemini_api_key" not in st.secrets:
 
 gmn_client = genai.Client(api_key=st.secrets["gemini_api_key"])
 
-# 2. รายละเอียด Database
-db_name = 'test_database.db'
+# 2. การกำหนดที่อยู่ไฟล์ Database ให้แม่นยำ
+# ใช้ os.path เพื่อระบุตำแหน่งไฟล์ให้ชัดเจนว่าอยู่ที่เดียวกับ app.py
+current_dir = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(current_dir, 'test_database.db')
+
 data_table = 'transactions'
 data_dict_text = """
 - trx_date: วันที่ทำธุรกรรม
@@ -37,8 +41,12 @@ data_dict_text = """
 
 # 3. HELPER FUNCTIONS
 def query_to_dataframe(sql_query):
+    # ตรวจสอบว่าไฟล์มีอยู่จริงไหมก่อนเชื่อมต่อ (เพื่อป้องกัน Error)
+    if not os.path.exists(db_path):
+        return f"Database Error: ไม่พบไฟล์ฐานข้อมูลที่ {db_path}. ไฟล์ที่มีในโฟลเดอร์คือ {os.listdir(current_dir)}"
+    
     try:
-        conn = sqlite3.connect(db_name)
+        conn = sqlite3.connect(db_path)
         df = pd.read_sql_query(sql_query, conn)
         conn.close()
         return df
@@ -61,7 +69,6 @@ def ask_gemini(prompt, is_json=False):
 
 # 4. CORE LOGIC
 def process_user_query(user_question):
-    # สร้าง SQL Prompt
     script_prompt = f"""
     ### Goal: แปลงคำถามภาษาธรรมชาติให้เป็น SQL สำหรับตาราง {data_table}
     ### Schema: {data_dict_text}
@@ -71,15 +78,15 @@ def process_user_query(user_question):
     
     sql_json = ask_gemini(script_prompt, is_json=True)
     try:
-        sql_query = json.loads(sql_json)['script']
+        # ตัดส่วนที่เป็น markdown code block ออกถ้ามี
+        clean_json = sql_json.replace("```json", "").replace("```", "").strip()
+        sql_query = json.loads(clean_json)['script']
     except:
-        return "ขออภัย ผมไม่สามารถสร้างคำสั่ง SQL สำหรับคำถามนี้ได้"
+        return f"ขออภัย ผมไม่สามารถสร้างคำสั่ง SQL สำหรับคำถามนี้ได้ (Debug: {sql_json})"
 
-    # Query ข้อมูล
     df = query_to_dataframe(sql_query)
     if isinstance(df, str): return df
 
-    # สรุปคำตอบ
     answer_prompt = f"""
     ### Context: คำถามคือ '{user_question}'
     ### ข้อมูลที่ได้: {df.to_string()}
