@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
-import os
 from google import genai
 from google.genai import types
 
@@ -13,12 +12,7 @@ if "gemini_api_key" not in st.secrets:
 
 gmn_client = genai.Client(api_key=st.secrets["gemini_api_key"])
 
-# 2. การกำหนดที่อยู่ไฟล์ Database ให้แม่นยำ
-# ใช้ os.path เพื่อระบุตำแหน่งไฟล์ให้ชัดเจนว่าอยู่ที่เดียวกับ app.py
-current_dir = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(current_dir, 'test_database.db')
-
-data_table = 'transactions'
+# 2. รายละเอียด Schema (เพื่อใช้บอก AI)
 data_dict_text = """
 - trx_date: วันที่ทำธุรกรรม
 - trx_no: หมายเลขธุรกรรม
@@ -41,15 +35,18 @@ data_dict_text = """
 
 # 3. HELPER FUNCTIONS
 def query_to_dataframe(sql_query):
-    # ตรวจสอบว่าไฟล์มีอยู่จริงไหมก่อนเชื่อมต่อ (เพื่อป้องกัน Error)
-    if not os.path.exists(db_path):
-        return f"Database Error: ไม่พบไฟล์ฐานข้อมูลที่ {db_path}. ไฟล์ที่มีในโฟลเดอร์คือ {os.listdir(current_dir)}"
-    
     try:
-        conn = sqlite3.connect(db_path)
-        df = pd.read_sql_query(sql_query, conn)
+        # อ่านไฟล์ CSV จาก GitHub Repository
+        df = pd.read_csv('test_transactions_2026.csv')
+        
+        # สร้าง Database ชั่วคราวในหน่วยความจำ
+        conn = sqlite3.connect(':memory:')
+        df.to_sql('transactions', conn, index=False)
+        
+        # รัน SQL query บนตารางในหน่วยความจำ
+        result_df = pd.read_sql_query(sql_query, conn)
         conn.close()
-        return df
+        return result_df
     except Exception as e:
         return f"Database Error: {e}"
 
@@ -69,8 +66,9 @@ def ask_gemini(prompt, is_json=False):
 
 # 4. CORE LOGIC
 def process_user_query(user_question):
+    # สร้าง SQL Prompt
     script_prompt = f"""
-    ### Goal: แปลงคำถามภาษาธรรมชาติให้เป็น SQL สำหรับตาราง {data_table}
+    ### Goal: แปลงคำถามภาษาธรรมชาติให้เป็น SQL สำหรับตารางชื่อ 'transactions'
     ### Schema: {data_dict_text}
     ### Input: {user_question}
     ### Output: ตอบกลับเป็น JSON เท่านั้นในรูปแบบ {{"script": "SELECT ..."}}
@@ -78,18 +76,19 @@ def process_user_query(user_question):
     
     sql_json = ask_gemini(script_prompt, is_json=True)
     try:
-        # ตัดส่วนที่เป็น markdown code block ออกถ้ามี
         clean_json = sql_json.replace("```json", "").replace("```", "").strip()
         sql_query = json.loads(clean_json)['script']
     except:
-        return f"ขออภัย ผมไม่สามารถสร้างคำสั่ง SQL สำหรับคำถามนี้ได้ (Debug: {sql_json})"
+        return "ขออภัย ผมไม่สามารถสร้างคำสั่ง SQL สำหรับคำถามนี้ได้"
 
+    # Query ข้อมูล
     df = query_to_dataframe(sql_query)
     if isinstance(df, str): return df
 
+    # สรุปคำตอบ
     answer_prompt = f"""
     ### Context: คำถามคือ '{user_question}'
-    ### ข้อมูลที่ได้: {df.to_string()}
+    ### ข้อมูลที่ได้จากตาราง: {df.to_string()}
     ### Task: สรุปคำตอบจากข้อมูลนี้ให้เป็นภาษาไทยแบบเป็นกันเอง
     """
     return ask_gemini(answer_prompt)
@@ -110,7 +109,7 @@ if prompt := st.chat_input("ถามคำถามเกี่ยวกับ�
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner('กำลังคิด...'):
+        with st.spinner('กำลังวิเคราะห์ข้อมูล...'):
             response = process_user_query(prompt)
             st.markdown(response)
     st.session_state.messages.append({"role": "assistant", "content": response})
